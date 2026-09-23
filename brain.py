@@ -15,6 +15,7 @@ import os
 import re
 import shlex
 import shutil
+import sys
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -742,7 +743,12 @@ class Brain:
 
     def command(self) -> list[str]:
         c = self.config
-        cmd = shlex.split(self._claude) + [
+        if sys.platform == "win32":
+            import winplat          # no POSIX shlex on C:\ paths; no .cmd shim
+            base = winplat.claude_argv(self._claude)
+        else:
+            base = shlex.split(self._claude)
+        cmd = base + [
             "-p", "--input-format", "stream-json", "--output-format", "stream-json",
             "--verbose", "--include-partial-messages",
             "--model", c.model, "--effort", c.effort, "--name", "jarvis",
@@ -889,6 +895,9 @@ class Brain:
 
     @staticmethod
     def _kill(proc: asyncio.subprocess.Process) -> None:
+        if sys.platform == "win32" and getattr(proc, "pid", None):
+            import winplat          # the whole tree: MCP children included
+            winplat.kill_tree(proc.pid)
         try:
             proc.kill()
         except ProcessLookupError:

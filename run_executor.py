@@ -17,6 +17,7 @@ import math
 import os
 import shlex
 import shutil
+import sys
 import time
 from typing import Callable
 
@@ -411,6 +412,9 @@ class RunExecutor:
             return
         except asyncio.TimeoutError:
             pass
+        if sys.platform == "win32" and getattr(proc, "pid", None):
+            import winplat
+            winplat.kill_tree(proc.pid)
         try:
             proc.kill()
         except (ProcessLookupError, OSError):
@@ -441,7 +445,11 @@ class RunExecutor:
 
     def _command(self, run_id: str, resume_from: str | None,
                 model: str | None = None) -> list[str]:
-        base = shlex.split(self._claude_path)
+        if sys.platform == "win32":
+            import winplat
+            base = winplat.claude_argv(self._claude_path)
+        else:
+            base = shlex.split(self._claude_path)
         cmd = base + ["-p", "--output-format", "stream-json", "--verbose",
                       "--session-id", run_id]
         if resume_from:

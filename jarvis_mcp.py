@@ -856,6 +856,14 @@ def handle(msg: dict) -> dict | None:
 
 
 def main() -> None:
+    if sys.platform == "win32":
+        # The pipe from Claude Code is UTF-8; Windows would decode it with
+        # the ANSI code page and garble every accented character.
+        for stream in (sys.stdin, sys.stdout):
+            try:
+                stream.reconfigure(encoding="utf-8", newline="\n")
+            except Exception:
+                pass
     for line in sys.stdin:
         line = line.strip()
         if not line:

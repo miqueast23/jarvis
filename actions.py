@@ -9,7 +9,9 @@ import asyncio
 import logging
 import os
 import re
+import shlex
 import shutil
+import sys
 
 log = logging.getLogger("jarvis.actions")
 
@@ -80,8 +82,21 @@ def applescript_escape(s: str) -> str:
     return s.replace("\\", "\\\\").replace('"', '\\"').replace("\r", "").replace("\n", " ")
 
 
-async def open_terminal(command: str = "") -> dict:
-    """Open Terminal.app and optionally run a command. Marks it blue for JARVIS."""
+async def open_terminal(command: str = "", cwd: str | None = None) -> dict:
+    """Open Terminal.app and optionally run a command. Marks it blue for JARVIS.
+
+    `cwd`, when given, is where the terminal starts. On macOS it becomes a
+    quoted `cd` in front of the command (as before); on Windows it is the new
+    console's working directory and never touches a command line.
+    """
+    if sys.platform == "win32":
+        import winplat
+        ok = await winplat.open_terminal(cwd, command)
+        return {"success": ok,
+                "confirmation": "The terminal is open, sir." if ok
+                else "I had trouble opening a terminal, sir."}
+    if cwd:
+        command = f"cd {shlex.quote(cwd)}" + (f" && {command}" if command else "")
     if command:
         escaped = applescript_escape(command)
         script = (
@@ -125,6 +140,13 @@ async def open_browser(url: str, browser: str = "chrome") -> dict:
     README, so this is a straight line from attacker text to a shell.
     `tests/test_applescript_url_injection.py` runs the payload.
     """
+    if sys.platform == "win32":
+        import winplat
+        ok, app_name = await winplat.open_url(url, browser)
+        return {"success": ok,
+                "confirmation": f"Pulled that up in {app_name}, sir." if ok
+                else f"{app_name} ran into a problem, sir."}
+
     escaped_url = applescript_escape(url)
 
     if browser.lower() == "firefox":
@@ -166,6 +188,8 @@ async def open_chrome(url: str) -> dict:
 
 async def get_chrome_tab_info() -> dict:
     """Read the current Chrome tab's title and URL via AppleScript."""
+    if sys.platform == "win32":
+        return {}          # Chrome exposes no scripting interface on Windows
     script = (
         'tell application "Google Chrome"\n'
         "    set tabTitle to title of active tab of front window\n"
@@ -218,6 +242,12 @@ def _vscode_command(path: str) -> list[str] | None:
 
 async def open_in_editor(path: str) -> dict:
     """Open a file or directory in VS Code, else in the system default."""
+    if sys.platform == "win32":
+        import winplat
+        ok, editor = await winplat.open_in_editor(path)
+        return {"success": ok, "editor": editor,
+                "confirmation": f"Opened that in {editor}, sir." if ok
+                else "I couldn't open an editor, sir."}
     argv = _vscode_command(path)
     editor = "VS Code"
     if argv is None:

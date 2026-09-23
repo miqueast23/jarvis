@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+import sys
 from pathlib import Path
 
 SENT = "sent"          # the bytes left over the socket — NOT that the target
@@ -31,7 +32,11 @@ def post_to_session(socket_path: str | None, prompt: str,
     """
     if not prompt or not prompt.strip():
         return REFUSED
-    if not socket_path or not Path(socket_path).exists():
+    if sys.platform == "win32":
+        import winplat
+        if not winplat.pipe_exists(socket_path):
+            return NOT_LIVE
+    elif not socket_path or not Path(socket_path).exists():
         return NOT_LIVE
 
     lines = []
@@ -52,6 +57,12 @@ def post_to_session(socket_path: str | None, prompt: str,
     lines.append(json.dumps({"type": "user",
                              "message": {"role": "user", "content": prompt.strip()}}))
     payload = ("\n".join(lines) + "\n").encode()
+
+    if sys.platform == "win32":
+        # Node's IPC path on Windows is a named pipe, and Python has no
+        # AF_UNIX there: the pipe is written like a file.
+        import winplat
+        return winplat.write_pipe(socket_path, payload, timeout)
 
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     sock.settimeout(timeout)

@@ -4,6 +4,10 @@
 JARVIS (Just A Rather Very Intelligent System) is a voice-first AI assistant for macOS. It runs locally on your machine, driving Claude Code for development tasks — every execution recorded as a *run* and watchable at `/dashboard`.
 
 ## Quick Start
+**On Windows, read `WINDOWS.md` first** — this fork carries a Windows port
+(`winplat.py` holds every Win32 call; setup is `install.ps1` + `start.ps1`,
+no openssl, no AppleScript).
+
 Read `skills/jarvis-setup/SKILL.md` first — it carries setup and debugging
 facts (mic-in-Chrome-only, the per-port permission trap, subscription vs. API
 key, what an expired login sounds like, Accessibility) that were only learned

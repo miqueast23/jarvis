@@ -69,6 +69,9 @@ def available() -> bool:
     Center settings, Focus/Do Not Disturb, or per-app permissions can still
     silently drop the notification even when this returns True.
     """
+    if sys.platform == "win32":
+        import winplat
+        return winplat.notifications_available()
     return sys.platform == "darwin" and shutil.which("osascript") is not None
 
 
@@ -90,6 +93,11 @@ async def notify(title: str, message: str, *, subtitle: str = "") -> bool:
         safe_title = _truncate(str(title or ""), _TITLE_MAX)
         safe_message = _truncate(str(message or ""), _MESSAGE_MAX)
         safe_subtitle = _truncate(str(subtitle or ""), _SUBTITLE_MAX)
+
+        if sys.platform == "win32":
+            import winplat
+            return await winplat.notify(safe_title, safe_message, safe_subtitle,
+                                        timeout=_TIMEOUT_SECONDS * 2)
 
         try:
             proc = await asyncio.create_subprocess_exec(

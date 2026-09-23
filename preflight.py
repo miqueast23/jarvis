@@ -133,6 +133,30 @@ def _parse_version(text: str) -> Optional[tuple[int, int, int]]:
 
 # ── individual checks ────────────────────────────────────────────────────
 
+def _claude_argv(claude: str) -> list[str]:
+    """`claude` as an argv prefix. On Windows the npm `claude.cmd` shim is
+    resolved to node + cli.js so cmd.exe never parses an argument."""
+    if sys.platform == "win32":
+        import winplat
+        return winplat.claude_argv(claude)
+    return [claude]
+
+
+def _read_windows_credentials(config_dir: Path) -> Optional[float]:
+    """Windows keeps the login in `<config>/.credentials.json`, not a keychain."""
+    try:
+        data = json.loads((config_dir / ".credentials.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    oauth = data.get("claudeAiOauth") if isinstance(data, dict) else None
+    if not isinstance(oauth, dict):
+        return None
+    expires_at_ms = oauth.get("refreshTokenExpiresAt")
+    if not isinstance(expires_at_ms, (int, float)):
+        return None
+    return expires_at_ms / 1000.0
+
+
 async def _check_claude_cli(timeout: float = DEFAULT_CHECK_TIMEOUT) -> Check:
     """`claude` is on PATH and is at least MIN_CLAUDE_VERSION."""
     claude = shutil.which("claude")
@@ -147,7 +171,7 @@ async def _check_claude_cli(timeout: float = DEFAULT_CHECK_TIMEOUT) -> Check:
             ),
         )
 
-    rc, stdout, stderr = await _run_subprocess(claude, "--version", timeout=timeout)
+    rc, stdout, stderr = await _run_subprocess(*_claude_argv(claude), "--version", timeout=timeout)
     if rc != 0:
         return Check(
             name="claude_cli",
@@ -228,6 +252,8 @@ async def _read_oauth_refresh_expiry(config_dir: Path, timeout: float) -> Option
     keychain entry, or output that doesn't parse the way expected. Callers
     must not treat None as a clean bill of health.
     """
+    if sys.platform == "win32":
+        return _read_windows_credentials(config_dir)
     if sys.platform != "darwin" or not shutil.which("security"):
         return None
     service = _keychain_service_name(config_dir)
@@ -283,7 +309,7 @@ async def _check_claude_login(timeout: float = DEFAULT_CHECK_TIMEOUT) -> Check:
     config_dir = _config_dir_from_env(env)
     where = f"config dir: {config_dir}"
 
-    rc, stdout, stderr = await _run_subprocess(claude, "auth", "status", timeout=timeout, env=env)
+    rc, stdout, stderr = await _run_subprocess(*_claude_argv(claude), "auth", "status", timeout=timeout, env=env)
     if rc != 0:
         return Check(
             name="claude_login",
@@ -356,6 +382,10 @@ async def _check_accessibility(timeout: float = DEFAULT_CHECK_TIMEOUT) -> Check:
     macOS version, this comes back as a WARN (unrecognised error) rather
     than mis-reporting OK, so it fails safe.
     """
+    if sys.platform == "win32":
+        return Check(name="accessibility", status=STATUS_OK,
+                     message="Windows needs no Accessibility grant: dialog keys go "
+                             "straight into the session's console.")
     if sys.platform != "darwin" or not shutil.which("osascript"):
         return Check(
             name="accessibility",
@@ -411,6 +441,9 @@ def _check_screen_recording_sync() -> Check:
     one) and NEVER captures anything to find out -- a screenshot the user did
     not ask for, at every boot, is precisely what this capability must not do.
     """
+    if sys.platform == "win32":
+        return Check(name="screen_recording", status=STATUS_OK,
+                     message="Windows needs no Screen Recording grant.")
     try:
         granted = screen.screen_recording_granted()
     except Exception as e:  # the module must never take startup down

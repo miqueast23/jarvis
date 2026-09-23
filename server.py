@@ -101,7 +101,11 @@ FISH_API_URL = "https://api.fish.audio/v1/tts"
 USER_NAME = os.getenv("USER_NAME", "sir")
 _SKIP_PERMISSIONS = os.getenv("JARVIS_SKIP_PERMISSIONS", "true").lower() not in ("0", "false", "no")
 
-DESKTOP_PATH = Path.home() / "Desktop"
+if sys.platform == "win32":
+    import winplat as _winplat
+    DESKTOP_PATH = _winplat.desktop_path()     # OneDrive-redirected Desktops too
+else:
+    DESKTOP_PATH = Path.home() / "Desktop"
 
 
 # ---------------------------------------------------------------------------
@@ -230,7 +234,8 @@ SCAN_CACHE_SECONDS = float(os.getenv("JARVIS_SCAN_CACHE", "300"))
 def _scan_roots() -> list[Path]:
     override = os.getenv("JARVIS_PROJECT_ROOTS", "").strip()
     if override:
-        return [Path(r).expanduser() for r in override.split(":") if r.strip()]
+        # os.pathsep: ":" on macOS, ";" on Windows, where ":" is in C:\
+        return [Path(r).expanduser() for r in override.split(os.pathsep) if r.strip()]
     return [DESKTOP_PATH, project_maker.projects_root()]
 
 
@@ -876,6 +881,7 @@ def _write_mcp_config(home: Path) -> Path:
         "env": {
             "JARVIS_TOOL_URL": f"{scheme}://{connect_host}:{port}/internal/tool",
             "JARVIS_TOOL_TOKEN_FILE": str(data_paths.tool_token_path()),
+            "PYTHONUTF8": "1",
         },
     }
     config = {
@@ -3532,8 +3538,7 @@ async def _perform_command(item: _StagedCommand) -> None:
         # wrong directory, and the path is quoted while the command itself has
         # already been through `builds.command_problem`, which permits no
         # shell metacharacter at all.
-        result = await actions.open_terminal(
-            f"cd {shlex.quote(item.path)} && {item.command}")
+        result = await _open_terminal_in(item.path, item.command)
         if result.get("success"):
             record("ran")
             await speech.say(
@@ -4853,6 +4858,19 @@ async def tool_open_in_browser(args: dict) -> str:
     return f"Opened {_plain_name(resolved.name, 'that file')} from {project_name}, sir."
 
 
+async def _open_terminal_in(path: str, command: str = "") -> dict:
+    """A terminal in `path`, optionally running `command`.
+
+    macOS: the original quoted `cd` string. Windows: the directory is the new
+    console's working directory and is never spliced into a command line."""
+    if sys.platform == "win32":
+        return await actions.open_terminal(command, cwd=path)
+    line = f"cd {shlex.quote(path)}"
+    if command:
+        line += f" && {command}"
+    return await actions.open_terminal(line)
+
+
 async def tool_open_in_terminal(args: dict) -> str:
     """Open Terminal.app in a project directory."""
     reference = str(args.get("project") or "").strip()
@@ -4861,7 +4879,7 @@ async def tool_open_in_terminal(args: dict) -> str:
     name, path, problem = _resolve_project_or_explain(reference)
     if problem:
         return problem
-    result = await actions.open_terminal(f"cd {shlex.quote(path)}")
+    result = await _open_terminal_in(path)
     if not result.get("success"):
         return result.get("confirmation") or "Terminal wouldn't open, sir."
     return f"Terminal's open in {name}, sir."
@@ -6542,7 +6560,7 @@ async def api_project_open(body: ProjectOpenRequest):
     if body.target == "editor":
         result = await actions.open_in_editor(body.path)
     elif body.target == "terminal":
-        result = await actions.open_terminal(f"cd {shlex.quote(body.path)}")
+        result = await _open_terminal_in(body.path)
     elif body.target == "browser":
         result = await actions.open_browser(Path(body.path).as_uri())
     else:
@@ -6555,7 +6573,7 @@ async def api_project_open(body: ProjectOpenRequest):
 def _scan_projects_sync() -> list[dict]:
     """Synchronous Desktop scan — runs in executor."""
     projects = []
-    desktop = Path.home() / "Desktop"
+    desktop = DESKTOP_PATH
     try:
         for entry in desktop.iterdir():
             if entry.is_dir() and not entry.name.startswith("."):
@@ -7010,6 +7028,13 @@ if __name__ == "__main__":
     os.environ["JARVIS_PORT"] = str(args.port)
     os.environ["JARVIS_SCHEME"] = proto
     os.environ["JARVIS_BIND_HOST"] = args.host
+
+    if sys.platform == "win32":
+        # Subprocesses (the brain, every run) need the Proactor loop; a
+        # Selector loop on Windows cannot spawn them at all.
+        import asyncio as _asyncio
+        _asyncio.set_event_loop_policy(_asyncio.WindowsProactorEventLoopPolicy())
+        os.environ.setdefault("PYTHONUTF8", "1")
 
     uvicorn.run(
         "server:app",

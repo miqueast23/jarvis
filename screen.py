@@ -286,6 +286,27 @@ async def capture_screen(display: int | None = None) -> Shot:
 
     Call this ONLY on a turn the user drove. See the module docstring.
     """
+    if sys.platform == "win32":
+        import winplat
+        try:
+            png, w, h, blank = await asyncio.wait_for(
+                asyncio.to_thread(winplat.capture_png, display, SHOT_MAX_EDGE),
+                timeout=CAPTURE_TIMEOUT_SEC)
+        except asyncio.TimeoutError:
+            raise ScreenError("I couldn't get a picture of your screen, sir")
+        except RuntimeError as e:
+            raise ScreenError(str(e))
+        except Exception as e:
+            log.warning(f"windows capture failed: {e}")
+            raise ScreenError("I couldn't get a picture of your screen, sir")
+        if len(png) > MAX_SHOT_BYTES:
+            raise ScreenError("that picture came out far too large to send, sir")
+        if blank:
+            raise ScreenError(
+                "your screen came back blank, sir — the display may be locked "
+                "or asleep")
+        return Shot(png=png, width=w, height=h)
+
     if screen_recording_granted() is False:
         raise ScreenError(_NO_PERMISSION)
 
@@ -386,6 +407,16 @@ async def list_windows() -> list[Window]:
     Raises ScreenError when Accessibility is missing. An empty list would have
     JARVIS say "nothing is open" — a lie with a remedy attached.
     """
+    if sys.platform == "win32":
+        import winplat
+        try:
+            rows = await asyncio.wait_for(
+                asyncio.to_thread(winplat.list_windows, MAX_WINDOWS),
+                timeout=WINDOWS_TIMEOUT_SEC)
+        except Exception as e:
+            log.warning(f"list_windows failed: {e}")
+            raise ScreenError("I couldn't read what's open, sir")
+        return [Window(app=a, title=t, frontmost=f) for a, t, f in rows]
     rc, stdout, stderr = await _run("osascript", "-e", _WINDOWS_SCRIPT,
                                     timeout=WINDOWS_TIMEOUT_SEC)
     if rc != 0:

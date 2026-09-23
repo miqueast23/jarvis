@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -46,6 +47,10 @@ def pid_alive(pid) -> bool:
     negative pid means "that group" to `os.kill`, neither of which is a real
     process, so both are rejected before the syscall.
     """
+    if sys.platform == "win32":
+        # os.kill(pid, 0) on Windows is TerminateProcess, not a probe.
+        import winplat
+        return winplat.pid_alive(pid)
     try:
         pid = int(pid)
         if pid <= 0:
@@ -97,6 +102,9 @@ class RosterEntry:
         Measured: 4 of 17 live entries had none. `ListAgents` cannot see those
         at all, which is why this watcher exists.
         """
+        if sys.platform == "win32":
+            import winplat
+            return winplat.pipe_exists(self.socket_path)
         return bool(self.socket_path) and Path(self.socket_path).exists()
 
 
@@ -659,7 +667,8 @@ def _same_dir(a: str, b: str) -> bool:
     """
     if not a or not b:
         return False
-    return os.path.realpath(a) == os.path.realpath(b)
+    return (os.path.normcase(os.path.realpath(a))
+            == os.path.normcase(os.path.realpath(b)))
 
 
 def _pick_primary(entries: list[RosterEntry]) -> RosterEntry:

@@ -8,6 +8,7 @@ import hashlib
 import json
 import logging
 import os
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -384,6 +385,18 @@ def ensure_tool_token() -> str:
             os.write(fd, token.encode("utf-8"))
         finally:
             os.close(fd)
+        return token
+
+    if sys.platform == "win32":
+        # No O_NOFOLLOW, getuid or fchmod on Windows. The file lives in the
+        # user's own profile, whose ACL already excludes other users; refuse
+        # a link or a non-file rather than follow it.
+        if path.is_symlink() or not path.is_file():
+            raise OSError(f"{path} is not a regular file")
+        existing = path.read_text(encoding="utf-8", errors="ignore").strip()
+        if existing:
+            return existing
+        path.write_text(token, encoding="utf-8")
         return token
 
     fd = os.open(str(path), os.O_RDWR | os.O_NOFOLLOW)

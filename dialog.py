@@ -37,6 +37,7 @@ import asyncio
 import logging
 import re
 import shutil
+import sys
 from dataclasses import dataclass
 
 log = logging.getLogger("jarvis.dialog")
@@ -148,6 +149,11 @@ def tty_for_pid(pid) -> str | None:
     session started without a terminal — the `sdk-cli` entrypoint on this
     machine is one), and anything unparseable.
     """
+    if sys.platform == "win32":
+        # Windows has no ttys; the console the pid is attached to plays that
+        # role (`con:<id>`), found by a detached helper process.
+        import winplat
+        return winplat.console_id_for_pid(pid)
     try:
         pid = int(pid)
     except (TypeError, ValueError):
@@ -364,6 +370,18 @@ async def answer(pid: int, key: str) -> str:
         tty = await tty_for_pid_async(pid)
         if tty is None:
             return NO_TTY
+        if sys.platform == "win32":
+            import winplat
+            result = await winplat.console_send_key(pid, normalized, tty, SEND_TIMEOUT)
+            if result == "ok":
+                return SENT
+            if result in ("gone", "moved"):
+                log.warning(f"console for pid {pid} was {result} at press time")
+                return NOT_FOUND
+            if result == "no_console":
+                return NO_TTY
+            log.warning(f"console key helper said {result!r}")
+            return FAILED
         tab = await find_terminal_tab(tty)
         if tab is None:
             # Another application hosts this tty. Press nothing.

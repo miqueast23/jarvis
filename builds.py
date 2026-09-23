@@ -40,6 +40,7 @@ from __future__ import annotations
 import datetime
 import json
 import re
+import sys
 from pathlib import Path
 
 # Where a build's artifacts live inside the project it is building. This
@@ -494,6 +495,12 @@ def command_problem(command: str, project_path: str) -> str | None:
             candidate = (root / token).resolve()
             if candidate.is_file() and candidate.is_relative_to(root):
                 return None
+            # Windows: `.venv/Scripts/python` is `python.exe` on disk.
+            if sys.platform == "win32":
+                for ext in (".exe", ".cmd", ".bat", ".ps1"):
+                    alt = candidate.with_name(candidate.name + ext)
+                    if alt.is_file() and alt.is_relative_to(root):
+                        return None
         except OSError:
             pass
         return (f"There's no {token} in that project, sir, so I've run "
