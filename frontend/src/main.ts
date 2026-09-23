@@ -19,6 +19,56 @@ type State = "idle" | "listening" | "thinking" | "speaking" | "compacting";
 let currentState: State = "idle";
 let isMuted = false;
 
+// ---------------------------------------------------------------------------
+// Free fallback voice. Without a FISH_API_KEY the server sends each sentence
+// as {type: "text"}; instead of only printing it, the browser speaks it with
+// the operating system's own voices (Windows ships Spanish and English ones).
+// The microphone is paused while it talks so JARVIS does not hear himself.
+// ---------------------------------------------------------------------------
+const SPEECH_LANG = ((import.meta as any).env?.VITE_JARVIS_LANG as string) || "en-US";
+const synth: SpeechSynthesis | null = "speechSynthesis" in window ? window.speechSynthesis : null;
+let fallbackSpeaking = false;
+
+function pickVoice(): SpeechSynthesisVoice | null {
+  if (!synth) return null;
+  const voices = synth.getVoices();
+  const lang = SPEECH_LANG.toLowerCase();
+  const base = lang.split("-")[0];
+  const exact = voices.filter((v) => v.lang.toLowerCase() === lang);
+  const family = voices.filter((v) => v.lang.toLowerCase().startsWith(base));
+  const pool = exact.length ? exact : family;
+  return pool.find((v) => /natural|online|google/i.test(v.name)) || pool[0] || null;
+}
+if (synth) synth.onvoiceschanged = () => { /* populate the voice list early */ synth.getVoices(); };
+
+function speakFallback(text: string) {
+  if (!synth || !text || text === "My voice is failing, sir.") return;
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = SPEECH_LANG;
+  const v = pickVoice();
+  if (v) u.voice = v;
+  u.onstart = () => {
+    fallbackSpeaking = true;
+    voiceInput.pause();
+    if (currentState !== "speaking") transition("speaking");
+  };
+  const done = () => {
+    if (synth.speaking || synth.pending) return;
+    fallbackSpeaking = false;
+    transition(isMuted ? "idle" : "listening");
+    if (!isMuted) voiceInput.resume();
+  };
+  u.onend = done;
+  u.onerror = done;
+  synth.speak(u);
+}
+
+function stopFallback() {
+  if (!synth) return;
+  synth.cancel();
+  fallbackSpeaking = false;
+}
+
 const statusEl = document.getElementById("status-text")!;
 const errorEl = document.getElementById("error-text")!;
 
@@ -66,6 +116,10 @@ function transition(newState: State) {
   updateStatus(newState);
 
   if (isMuted) return;
+  if (fallbackSpeaking) {
+    voiceInput.pause();          // still talking through the browser voice
+    return;
+  }
   if (newState === "speaking" && muteMicDuringSpeech) {
     voiceInput.pause();
   } else {
@@ -138,6 +192,7 @@ function hush() {
   if (currentState !== "speaking") return;
   // Locally first: the round trip is real and silence should be instant.
   audioPlayer.stop();
+  stopFallback();
   socket.send({ type: "hush" });
   transition(isMuted ? "idle" : "listening");
 }
@@ -177,6 +232,7 @@ socket.onMessage((msg) => {
     if (msg.text) console.log("[JARVIS]", msg.text);
   } else if (type === "stop") {
     audioPlayer.stop();
+    stopFallback();
     transition(isMuted ? "idle" : "listening");
   } else if (type === "drop_queued") {
     audioPlayer.dropQueued();
@@ -190,6 +246,7 @@ socket.onMessage((msg) => {
     // A chunk TTS could not voice: show it instead of losing it
     console.log("[JARVIS]", msg.text);
     statusEl.textContent = String(msg.text);
+    speakFallback(String(msg.text ?? ""));
   } else if (type === "notice") {
     // Shown, never spoken. The server sends one when it is about to be busy
     // for a few seconds (a context rotation), and an empty string to clear it.
