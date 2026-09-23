@@ -229,7 +229,8 @@ export function createVoiceInput(
     const sr = new SR();
     sr.continuous = true;
     sr.interimResults = true;
-    sr.lang = "en-US";
+    // VITE_JARVIS_LANG in frontend/.env (e.g. es-VE) picks the dictation language.
+    sr.lang = ((import.meta as any).env?.VITE_JARVIS_LANG as string) || "en-US";
     const e: Engine = { sr, running: false, audio: false, startedAt: 0, stoppedAt: 0, retired: false };
 
     sr.onstart = () => {
