@@ -21,12 +21,12 @@ export default defineConfig({
     headers: SECURITY_HEADERS,
     proxy: {
       "/ws": {
-        target: "https://localhost:8340",
+        target: "https://127.0.0.1:8340",
         ws: true,
         secure: false,
       },
       "/api": {
-        target: "https://localhost:8340",
+        target: "https://127.0.0.1:8340",
         secure: false,
       },
     },
