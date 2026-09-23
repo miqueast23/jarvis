@@ -65,9 +65,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import session_watch
@@ -158,8 +159,16 @@ def _tokens_from(usage) -> Tokens:
 # `fromisoformat` accepts that string happily, so catching only its ValueError
 # left the second call unguarded. Two years of slack at each end covers every
 # UTC offset without needing to know the local one.
-_DAY_MIN = datetime(2, 1, 1).timestamp()
-_DAY_MAX = datetime(9997, 1, 1).timestamp()
+if sys.platform == "win32":
+    # Windows' C runtime cannot convert local times before 1970 or after
+    # 3000: `datetime(2, 1, 1).timestamp()` itself raises OSError [Errno 22]
+    # at import, and `fromtimestamp` refuses negative epochs. So the window
+    # there is 1970-01-03 .. 2999-01-01, which still covers every real stamp.
+    _DAY_MIN = 2 * 86400.0
+    _DAY_MAX = datetime(2999, 1, 1, tzinfo=timezone.utc).timestamp()
+else:
+    _DAY_MIN = datetime(2, 1, 1).timestamp()
+    _DAY_MAX = datetime(9997, 1, 1).timestamp()
 
 
 def _epoch(stamp) -> float | None:
