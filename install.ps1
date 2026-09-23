@@ -55,6 +55,13 @@ if (-not (Test-Path .env)) {
     Write-Host '  Created .env - put your FISH_API_KEY in it.' -ForegroundColor Yellow
 } else { Write-Host '  .env already exists - left as is.' }
 
+Step 'Voice language'
+$fenv = Join-Path $PSScriptRoot 'frontend\.env'
+if (-not (Test-Path $fenv)) {
+    Set-Content -Path $fenv -Value 'VITE_JARVIS_LANG=es-VE' -Encoding ASCII
+    Write-Host '  Dictation and voice set to Spanish (es-VE). Change it in frontend\.env.'
+}
+
 Step 'Claude Code login'
 Write-Host '  If you have never logged in, run:  claude   (then /login) and close it.'
 Write-Host '  JARVIS runs on your Claude subscription - no API key needed.'

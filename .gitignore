@@ -60,3 +60,6 @@ AGENTS.md
 # Always local — never tracked in the parent repo.
 .claude/worktrees/
 # <!-- orcha:managed:end -->
+
+# Windows port
+jarvis-backend.log

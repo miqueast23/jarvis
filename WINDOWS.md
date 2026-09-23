@@ -5,7 +5,11 @@ Trae la versión nueva del video: el cerebro corre sobre tu plan de Claude Code 
 
 ## Instalación (una sola vez)
 
-Necesitas **Python 3.11+**, **Node.js 18+**, **Google Chrome** y una API key de **Fish Audio** (la voz; es lo único que se paga aparte).
+Necesitas **Python 3.11+**, **Node.js 18+** y **Google Chrome**. La API key de **Fish Audio** es opcional: sin ella JARVIS habla con las voces que trae Windows (gratis, en español).
+
+**Lo más fácil:** doble clic en **`JARVIS.cmd`**. La primera vez instala todo; después solo arranca. Si algo falla, la ventana queda abierta con el error y el backend deja su registro en `jarvis-backend.log`.
+
+A mano:
 
 ```powershell
 cd C:\ruta\a\jarvis
@@ -16,7 +20,7 @@ El instalador crea `.venv`, instala dependencias (incluye `mss`, `Pillow` y `cry
 
 Después:
 
-1. Abre `.env` y pon `FISH_API_KEY=...` (opcional: `USER_NAME=Os`).
+1. (Opcional) En `.env` pon `FISH_API_KEY=...` para la voz británica de Fish Audio, y `USER_NAME=...`.
 2. Si nunca iniciaste sesión en Claude Code: ejecuta `claude`, haz `/login` y ciérralo.
 3. **No** dejes `ANTHROPIC_API_KEY` en el entorno: JARVIS la elimina de todos modos para cobrar siempre contra tu suscripción.
 
@@ -28,7 +32,7 @@ Después:
 
 Abre dos ventanas (backend en `https://127.0.0.1:8340` y Vite en `http://localhost:5173`) y lanza Chrome. Haz clic una vez en la página para habilitar audio y habla. Dashboard: `http://localhost:5173/dashboard.html`.
 
-**Dictado en español (opcional):** crea `frontend\.env` con `VITE_JARVIS_LANG=es-VE` (o `es-ES`) y reinicia. Por defecto es `en-US`. La voz de Fish Audio es británica; puedes cambiarla con `FISH_VOICE_ID`.
+**Idioma:** el dictado y la voz gratuita quedan en español (`frontend\.env` → `VITE_JARVIS_LANG=es-VE`). Para inglés pon `en-US` y reinicia. Con Fish Audio, la voz la decide `FISH_VOICE_ID`.
 
 ## Qué cambia respecto a macOS
 

@@ -476,6 +476,11 @@ def _check_fish_api_key_sync() -> Check:
     """FISH_API_KEY must be set or JARVIS has no voice."""
     if os.environ.get("FISH_API_KEY"):
         return Check(name="fish_api_key", status=STATUS_OK, message="FISH_API_KEY is set.")
+    if sys.platform == "win32":
+        # The Windows port speaks through the browser's built-in voices when
+        # there is no Fish Audio key, so a missing key is not a broken voice.
+        return Check(name="fish_api_key", status=STATUS_OK,
+                     message="No FISH_API_KEY: using the browser's built-in voice.")
     return Check(
         name="fish_api_key",
         status=STATUS_FAIL,

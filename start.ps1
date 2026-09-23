@@ -16,13 +16,35 @@ $env:PYTHONIOENCODING = 'utf-8'
 $shell = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
 if (-not $shell) { $shell = 'powershell.exe' }
 
-$backend  = "Set-Location -LiteralPath '$PSScriptRoot'; `$env:PYTHONUTF8='1'; & '$vpy' server.py --host 127.0.0.1 --port $Port"
+# Spanish dictation and voice unless the user already chose a language.
+$fenv = Join-Path $PSScriptRoot 'frontend\.env'
+if (-not (Test-Path $fenv)) { Set-Content -Path $fenv -Value 'VITE_JARVIS_LANG=es-VE' -Encoding ASCII }
+
 $frontend = "Set-Location -LiteralPath '$PSScriptRoot\frontend'; npm run dev"
 
+function Wait-Port([int]$p, [int]$seconds) {
+    $deadline = (Get-Date).AddSeconds($seconds)
+    while ((Get-Date) -lt $deadline) {
+        try { $c = New-Object System.Net.Sockets.TcpClient; $c.Connect('127.0.0.1', $p); $c.Close(); return $true } catch { Start-Sleep -Milliseconds 700 }
+    }
+    return $false
+}
+
+$log = Join-Path $PSScriptRoot 'jarvis-backend.log'
+$backend = "Set-Location -LiteralPath '$PSScriptRoot'; `$env:PYTHONUTF8='1'; & '$vpy' server.py --host 127.0.0.1 --port $Port 2>&1 | Tee-Object -FilePath '$log'"
+
+Write-Host 'Starting the JARVIS backend...' -ForegroundColor Cyan
 Start-Process $shell -ArgumentList '-NoExit', '-Command', $backend
-Start-Sleep -Seconds 3
+if (-not (Wait-Port $Port 90)) {
+    Write-Host "The backend did not start. Look at its window, or send jarvis-backend.log to Claude." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Starting the interface...' -ForegroundColor Cyan
 Start-Process $shell -ArgumentList '-NoExit', '-Command', $frontend
-Start-Sleep -Seconds 4
+if (-not (Wait-Port 5173 90)) {
+    Write-Host "The interface (Vite) did not start. Look at its window." -ForegroundColor Red
+    exit 1
+}
 
 $chrome = @(
     "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
@@ -34,3 +56,4 @@ $url = 'http://localhost:5173'
 if ($chrome) { Start-Process $chrome $url }
 else { Write-Host "Open Chrome at $url (the microphone only works in Chrome)." -ForegroundColor Yellow }
 Write-Host "JARVIS: $url   Dashboard: $url/dashboard.html"
+Write-Host 'Click once on the page, allow the microphone, and talk.' -ForegroundColor Green
