@@ -284,3 +284,9 @@ def test_project_roots_split_on_pathsep(monkeypatch):
     monkeypatch.setattr(os, "pathsep", ";")
     monkeypatch.setenv("JARVIS_PROJECT_ROOTS", r"C:\code;D:\work")
     assert [str(p) for p in server._scan_roots()] == [r"C:\code", r"D:\work"]
+
+
+def test_missing_fish_key_is_fine_on_windows(win, monkeypatch):
+    import preflight
+    monkeypatch.delenv("FISH_API_KEY", raising=False)
+    assert preflight._check_fish_api_key_sync().status == preflight.STATUS_OK
